@@ -1,0 +1,12 @@
+# NmapAutomator — dependencias
+# Instalar con: pip install -r requirements.txt
+
+# CLI y UI en terminal
+typer[all]>=0.12.0
+rich>=13.7.0
+
+# Generación de reportes PDF
+reportlab>=4.2.0
+
+# Utilidades de red (opcional, para validación avanzada)
+python-nmap>=0.7.1

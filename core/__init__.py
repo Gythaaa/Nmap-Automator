@@ -1,0 +1,1 @@
+# NmapAutomator — core package
