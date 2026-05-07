@@ -155,8 +155,8 @@ MIT License — ver [LICENSE](LICENSE) para detalles.
 
 ## 👤 Autor
 
-**Mau** — Cybersecurity Professional | eWPTX | eJPT
+**Gythaaa** — Cybersecurity Junior | eWPTX | eJPT
 
-- Plataforma: CachyOS (Arch Linux)
+- Plataforma: KaliLinux - Windows
 - Especialización: Web Application Penetration Testing
 ```
