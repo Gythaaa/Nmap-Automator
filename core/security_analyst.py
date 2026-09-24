@@ -548,7 +548,7 @@ class SecurityNarrativeAnalyst:
         if not findings:
             return "El escaneo no produjo hallazgos para enriquecer con IA.", {}
 
-        selected = findings[:30]
+        selected = findings[:10]
         local_ids = {f"F{index:03d}": item for index, item in enumerate(selected, 1)}
         allowed_references: dict[str, set[str]] = {}
         allowed_cves: dict[str, set[str]] = {}
