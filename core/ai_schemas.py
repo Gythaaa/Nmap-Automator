@@ -1,5 +1,6 @@
 """Typed response models and evidence-grounding checks for AI narratives."""
 
+import logging
 import re
 from typing import Any
 
@@ -9,6 +10,8 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_valida
 CVE_TOKEN_PATTERN = re.compile(r"\bCVE-\d{4}-[A-Z0-9]+(?:-[A-Z0-9]+)*\b", re.IGNORECASE)
 VALID_CVE_PATTERN = re.compile(r"^CVE-\d{4}-\d{4,}$", re.IGNORECASE)
 URL_PATTERN = re.compile(r"https?://\S+", re.IGNORECASE)
+
+logger = logging.getLogger("nmap_automator.ai")
 
 
 class FindingNarrativeOutput(BaseModel):
@@ -59,39 +62,73 @@ def validate_narrative_output(
     allowed_references: dict[str, set[str]],
     allowed_cves: dict[str, set[str]],
 ) -> SecurityNarrativeOutput:
-    """Validate shape, finding identity, cited references, and CVEs against evidence."""
+    """Validate shape, finding identity, cited references, and CVEs against evidence.
+
+    Estrategia tolerante: si un hallazgo individual falla la validación, se descarta
+    solo ese hallazgo (con warning) en vez de tumbar toda la narrativa. El resumen
+    ejecutivo sí se valida globalmente contra todos los CVEs conocidos.
+    """
     try:
         output = SecurityNarrativeOutput.model_validate(payload)
     except ValidationError as exc:
         raise RuntimeError(f"La respuesta IA no cumple el esquema Pydantic: {exc}") from exc
 
     seen_ids: set[str] = set()
+
+    # El resumen ejecutivo se valida contra TODOS los CVEs conocidos
     all_known_cves = set().union(*allowed_cves.values()) if allowed_cves else set()
     _validate_claims(output.executive_summary, all_known_cves, "resumen ejecutivo")
 
+    valid_findings: list[FindingNarrativeOutput] = []
+    discarded: list[tuple[str, str]] = []
+
     for item in output.findings:
+        # ID desconocido o duplicado → descartar
         if item.id not in allowed_finding_ids:
-            raise RuntimeError(f"La respuesta IA contiene un hallazgo desconocido: {item.id}.")
+            discarded.append((item.id, "ID desconocido"))
+            continue
         if item.id in seen_ids:
-            raise RuntimeError(f"La respuesta IA duplicó el hallazgo {item.id}.")
+            discarded.append((item.id, "ID duplicado"))
+            continue
         seen_ids.add(item.id)
 
+        # Referencias no recuperadas → descartar
         unknown_references = set(item.references) - allowed_references.get(item.id, set())
         if unknown_references:
-            raise RuntimeError(
-                f"La respuesta IA citó referencias no recuperadas para {item.id}: "
-                f"{', '.join(sorted(unknown_references))}."
+            discarded.append(
+                (
+                    item.id,
+                    f"referencias no recuperadas: {', '.join(sorted(unknown_references))}",
+                )
+            )
+            continue
+
+        # CVEs no permitidos en el texto → descartar solo ese hallazgo
+        allowed = allowed_cves.get(item.id, set())
+        try:
+            for text in (item.summary, item.impact, item.remediation):
+                _validate_claims(text, allowed, f"hallazgo {item.id}")
+        except RuntimeError as exc:
+            discarded.append((item.id, str(exc)))
+            continue
+
+        valid_findings.append(item)
+
+    if discarded:
+        for finding_id, reason in discarded:
+            logger.warning(
+                "Hallazgo %s descartado de la narrativa IA: %s", finding_id, reason
             )
 
-        allowed = allowed_cves.get(item.id, set())
-        for text in (item.summary, item.impact, item.remediation):
-            _validate_claims(text, allowed, f"hallazgo {item.id}")
+    output.findings = valid_findings
 
+    # Si faltan hallazgos, advertir pero NO fallar
     missing_ids = allowed_finding_ids - seen_ids
     if missing_ids:
-        raise RuntimeError(
-            "La respuesta IA omitió hallazgos que debía explicar: "
-            f"{', '.join(sorted(missing_ids))}."
+        logger.warning(
+            "La respuesta IA omitió %d hallazgo(s): %s",
+            len(missing_ids),
+            ", ".join(sorted(missing_ids)),
         )
 
     return output
