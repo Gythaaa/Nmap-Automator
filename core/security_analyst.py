@@ -14,6 +14,7 @@ from core.scanner import HostResult, PortInfo
 from core.vulnerability_sources import (
     CISA_KEV_URL,
     VulnerabilitySources,
+    canonicalize_cpe,
     has_concrete_cpe_version,
 )
 
@@ -97,11 +98,12 @@ class SecurityAnalyst:
         for host in hosts:
             for port in host.ports:
                 for cpe in port.cpes:
-                    if has_concrete_cpe_version(cpe) and cpe not in seen_cpes:
-                        seen_cpes.add(cpe)
-                    elif not has_concrete_cpe_version(cpe):
+                    normalized_cpe = canonicalize_cpe(cpe) or cpe
+                    if has_concrete_cpe_version(normalized_cpe):
+                        seen_cpes.add(normalized_cpe)
+                    else:
                         generic_cpe_seen = True
-                    cpe_ports.append((host, port, cpe))
+                    cpe_ports.append((host, port, normalized_cpe))
 
         if generic_cpe_seen:
             self.warnings.append(

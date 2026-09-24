@@ -20,6 +20,7 @@ from core.security_analyst import (
     create_narrative_analyst,
 )
 from reports.pdf_report import PDFReportGenerator
+from utils.app_logging import log_exception_to_file
 from utils.ui import print_banner, print_summary_table, confirm_scan
 from utils.validators import validate_targets
 
@@ -279,7 +280,21 @@ def scan(
                             finding.ai_provider = provider_status
                             finding.ai_generated = True
                 except RuntimeError as exc:
-                    console.print(f"[yellow]Narrativa IA omitida:[/] {exc}")
+                    log_path = output.parent / "nmap_automator.log"
+                    try:
+                        log_exception_to_file(
+                            log_path,
+                            "Fallo durante la generación o validación de la narrativa IA.",
+                        )
+                        console.print(
+                            f"[yellow]Narrativa IA omitida:[/] {exc}\n"
+                            f"[yellow]Traceback completo:[/] {log_path}"
+                        )
+                    except OSError as log_error:
+                        console.print(
+                            f"[yellow]Narrativa IA omitida:[/] {exc}\n"
+                            f"[red]No se pudo escribir el log {log_path}:[/] {log_error}"
+                        )
             else:
                 ai_summary = ""
 

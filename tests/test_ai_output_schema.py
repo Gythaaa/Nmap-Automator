@@ -121,6 +121,12 @@ class AiOutputSchemaTests(unittest.TestCase):
         self.assertFalse(schema["additionalProperties"])
         self.assertFalse(schema["properties"]["findings"]["items"]["additionalProperties"])
 
+    def test_finding_id_pattern_uses_ascii_digit_class_for_local_decoders(self):
+        schema = pydantic_output_schema()
+
+        pattern = schema["properties"]["findings"]["items"]["properties"]["id"]["pattern"]
+        self.assertEqual(pattern, r"^F[0-9]{3}$")
+
 
 if __name__ == "__main__":
     unittest.main()

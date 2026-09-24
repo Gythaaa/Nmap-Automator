@@ -60,6 +60,7 @@ nmap_automator/
 │   └── pdf_report.py          # Generación de reporte PDF (ReportLab)
 │
 ├── tests/                     # Pruebas locales, sin Nmap ni llamadas a API
+│   ├── test_app_logging.py
 │   ├── test_nmap_parser.py
 │   ├── test_cve_matching.py
 │   ├── test_finding_classification.py
@@ -71,7 +72,8 @@ nmap_automator/
 ├── utils/
 │   ├── __init__.py
 │   ├── ui.py                  # Banner, tablas Rich, confirmación
-│   └── validators.py          # Validación de IPs, CIDRs, hostnames
+│   ├── validators.py          # Validación de IPs, CIDRs, hostnames
+│   └── app_logging.py         # Registro de tracebacks de errores recuperables
 │
 ├── output/                     # PDFs generados (ignorado por Git)
 ├── main.py                    # Entry point CLI (Typer)
@@ -279,7 +281,7 @@ $env:NMAP_OLLAMA_URL = "http://127.0.0.1:11434"
 $env:NMAP_OLLAMA_MODEL = "qwen2.5:7b"
 ```
 
-La función de IA requiere que el proveedor elegido esté configurado y disponible. Si la generación de narrativa falla, el reporte se genera de todas formas con los datos determinísticos. El escaneo normal, sin `--security-analysis` ni `--ai`, no hace consultas externas; el análisis NVD/CISA no recibe IPs ni hostnames.
+La función de IA requiere que el proveedor elegido esté configurado y disponible. Si la generación de narrativa falla, el reporte se genera de todas formas con los datos determinísticos; la terminal muestra el error y la ruta del traceback completo en `output/nmap_automator.log` (o junto a la ruta indicada en `--output`). El escaneo normal, sin `--security-analysis` ni `--ai`, no hace consultas externas; el análisis NVD/CISA no recibe IPs ni hostnames.
 
 ---
 

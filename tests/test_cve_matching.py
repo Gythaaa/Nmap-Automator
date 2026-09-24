@@ -1,8 +1,13 @@
 import unittest
+from unittest.mock import patch
 
 from core.scanner import HostResult, PortInfo
 from core.security_analyst import SecurityAnalyst
-from core.vulnerability_sources import canonicalize_cpe, has_concrete_cpe_version
+from core.vulnerability_sources import (
+    VulnerabilitySources,
+    canonicalize_cpe,
+    has_concrete_cpe_version,
+)
 
 
 class FakeVulnerabilitySources:
@@ -36,8 +41,24 @@ class CveMatchingTests(unittest.TestCase):
             has_concrete_cpe_version("cpe:2.3:a:apache:http_server:*:*:*:*:*:*:*:*")
         )
 
+    def test_nvd_request_converts_legacy_cpe_and_uses_vulnerable_flag(self):
+        source = VulnerabilitySources()
+        with patch.object(
+            source, "_nvd_query", return_value={"vulnerabilities": []}
+        ) as nvd_query:
+            source.get_cves_for_cpe("cpe:/a:apache:http_server:2.4.49")
+
+        params = nvd_query.call_args.args[0]
+        self.assertEqual(
+            params["cpeName"],
+            "cpe:2.3:a:apache:http_server:2.4.49:*:*:*:*:*:*:*",
+        )
+        # NVD's endpoint treats isVulnerable as a presence flag; "true" returns 404.
+        self.assertEqual(params["isVulnerable"], "")
+
     def test_exact_cpe_match_creates_candidate_not_confirmed_finding(self):
         cpe = "cpe:2.3:a:apache:http_server:2.4.49:*:*:*:*:*:*:*"
+        nmap_cpe = "cpe:/a:apache:http_server:2.4.49"
         record = {
             "cve": {
                 "id": "CVE-2021-41773",
@@ -58,7 +79,7 @@ class CveMatchingTests(unittest.TestCase):
             product="Apache httpd",
             version="2.4.49",
             extra_info="",
-            cpes=[cpe],
+            cpes=[nmap_cpe],
         )
         host = HostResult(
             ip="192.0.2.10",

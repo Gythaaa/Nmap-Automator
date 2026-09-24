@@ -16,7 +16,8 @@ class FindingNarrativeOutput(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    id: str = Field(pattern=r"^F\d{3}$")
+    # Use an explicit digit class; some local constrained decoders do not support \d.
+    id: str = Field(pattern=r"^F[0-9]{3}$")
     summary: str = Field(min_length=1, max_length=1600)
     impact: str = Field(min_length=1, max_length=1800)
     remediation: str = Field(min_length=1, max_length=1800)
