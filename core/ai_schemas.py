@@ -3,7 +3,7 @@
 import re
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 
 CVE_TOKEN_PATTERN = re.compile(r"\bCVE-\d{4}-[A-Z0-9]+(?:-[A-Z0-9]+)*\b", re.IGNORECASE)
@@ -23,6 +23,25 @@ class FindingNarrativeOutput(BaseModel):
     remediation: str = Field(min_length=1, max_length=1800)
     confidence: float = Field(ge=0, le=1)
     references: list[str] = Field(max_length=5)
+
+    @field_validator("confidence", mode="before")
+    @classmethod
+    def normalize_percentage_confidence(cls, value: Any) -> Any:
+        """Accept model confidence as either a fraction or a 0-100 percentage."""
+        numeric_value: float
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            numeric_value = float(value)
+        elif isinstance(value, str):
+            try:
+                numeric_value = float(value.strip())
+            except ValueError:
+                return value
+        else:
+            return value
+
+        if 1 < numeric_value <= 100:
+            return numeric_value / 100
+        return value
 
 
 class SecurityNarrativeOutput(BaseModel):

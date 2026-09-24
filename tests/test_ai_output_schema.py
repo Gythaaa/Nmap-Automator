@@ -75,6 +75,22 @@ class AiOutputSchemaTests(unittest.TestCase):
         self.assertEqual(narrative["summary"], valid_payload()["findings"][0]["summary"])
         self.assertEqual(narrative["confidence"], 0.91)
 
+    def test_normalizes_percentage_confidence_from_model(self):
+        payload = valid_payload()
+        payload["findings"][0]["confidence"] = 85
+
+        _, narratives = StaticAnalyst(payload).generate([make_finding()])
+
+        self.assertEqual(narratives[make_finding().finding_id]["confidence"], 0.85)
+
+    def test_accepts_fractional_confidence_without_rescaling(self):
+        payload = valid_payload()
+        payload["findings"][0]["confidence"] = 0.85
+
+        _, narratives = StaticAnalyst(payload).generate([make_finding()])
+
+        self.assertEqual(narratives[make_finding().finding_id]["confidence"], 0.85)
+
     def test_target_identifiers_are_redacted_by_default(self):
         finding = make_finding()
         analyst = StaticAnalyst(valid_payload())

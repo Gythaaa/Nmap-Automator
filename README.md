@@ -293,7 +293,7 @@ Las pruebas usan XML de ejemplo, fuentes NVD simuladas y respuestas IA de muestr
 python -m unittest discover -s tests -v
 ```
 
-La validación IA usa Pydantic, verifica los IDs de hallazgo y las referencias contra la evidencia recuperada, y rechaza CVE no presentes o URLs no validadas. Estas reglas automatizadas no demuestran semánticamente cada afirmación en lenguaje natural.
+La validación IA usa Pydantic, normaliza `confidence` si el modelo la expresa como porcentaje (`85` → `0.85`), verifica los IDs de hallazgo y las referencias contra la evidencia recuperada, y rechaza CVE no presentes o URLs no validadas. Estas reglas automatizadas no demuestran semánticamente cada afirmación en lenguaje natural.
 
 ## 📄 Reporte PDF
 
