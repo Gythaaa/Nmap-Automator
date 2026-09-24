@@ -7,6 +7,7 @@ del escaneo: hosts, puertos, servicios, vulnerabilidades y módulos Metasploit.
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
+from xml.sax.saxutils import escape
 
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
@@ -19,6 +20,7 @@ from reportlab.platypus import (
 from reportlab.lib.enums import TA_CENTER, TA_LEFT
 from rich.console import Console
 
+from core.findings import SecurityFinding
 from core.scanner import HostResult
 
 
@@ -52,6 +54,8 @@ class PDFReportGenerator:
         hosts: list[HostResult],
         mode: str,
         targets: list[str],
+        findings: Optional[list[SecurityFinding]] = None,
+        ai_summary: str = "",
     ) -> None:
         """
         Construye y guarda el PDF con todos los hallazgos del escaneo.
@@ -77,12 +81,16 @@ class PDFReportGenerator:
         story = []
         story += self._build_cover(mode, targets, hosts)
         story.append(PageBreak())
-        story += self._build_executive_summary(hosts, mode)
+        story += self._build_executive_summary(hosts, mode, ai_summary)
         story.append(PageBreak())
 
         for host in hosts:
             story += self._build_host_section(host)
             story.append(Spacer(1, 0.5 * cm))
+
+        if findings is not None:
+            story.append(PageBreak())
+            story += self._build_findings_section(findings)
 
         story += self._build_recommendations(hosts)
         story.append(PageBreak())
@@ -142,7 +150,9 @@ class PDFReportGenerator:
         ))
         return cover
 
-    def _build_executive_summary(self, hosts: list[HostResult], mode: str) -> list:
+    def _build_executive_summary(
+        self, hosts: list[HostResult], mode: str, ai_summary: str = ""
+    ) -> list:
         """Resumen ejecutivo con estadísticas generales."""
         s = self._styles
         story = [
@@ -152,7 +162,9 @@ class PDFReportGenerator:
         ]
 
         total_ports = sum(len(h.ports) for h in hosts)
-        hosts_with_vulns = sum(1 for h in hosts if h.vuln_scripts)
+        hosts_with_nse_output = sum(
+            1 for h in hosts if h.vuln_scripts or any(port.scripts for port in h.ports)
+        )
         hosts_with_msf = sum(
             1 for h in hosts if any(p.metasploit_modules for p in h.ports)
         )
@@ -160,10 +172,15 @@ class PDFReportGenerator:
         summary_text = (
             f"El escaneo en modo <b>{mode.upper()}</b> identificó <b>{len(hosts)}</b> host(s) "
             f"en la red objetivo. Se encontraron <b>{total_ports}</b> puertos abiertos en total. "
-            f"<b>{hosts_with_vulns}</b> host(s) presentaron scripts de vulnerabilidad NSE positivos y "
-            f"<b>{hosts_with_msf}</b> host(s) tienen servicios con módulos Metasploit aplicables."
+            f"<b>{hosts_with_nse_output}</b> host(s) tuvieron salida de scripts NSE y "
+            f"<b>{hosts_with_msf}</b> host(s) tienen servicios para los que se sugirieron módulos "
+            "Metasploit; la sugerencia no confirma vulnerabilidad ni aplicabilidad."
         )
         story.append(Paragraph(summary_text, s["body"]))
+        if ai_summary:
+            story.append(Spacer(1, 0.2 * cm))
+            story.append(Paragraph("Análisis asistido por IA", s["subsection"]))
+            story.append(Paragraph(escape(ai_summary), s["body"]))
         story.append(Spacer(1, 0.5 * cm))
 
         # Tabla resumen por host
@@ -180,6 +197,98 @@ class PDFReportGenerator:
 
         t = self._make_table(rows, col_widths=[3 * cm, 3.5 * cm, 2 * cm, 2.5 * cm, 5.5 * cm])
         story.append(t)
+        return story
+
+    def _build_findings_section(self, findings: list[SecurityFinding]) -> list:
+        """Render vulnerability candidates and verified NSE findings separately."""
+        s = self._styles
+        story = [
+            Paragraph("HALLAZGOS DEL ANALISTA DE SEGURIDAD", s["section"]),
+            HRFlowable(width="100%", thickness=1, color=ACCENT),
+            Spacer(1, 0.3 * cm),
+        ]
+        if not findings:
+            story.append(Paragraph(
+                "No se encontraron hallazgos con las reglas y fuentes consultadas. "
+                "Esto no demuestra que el sistema esté libre de vulnerabilidades; "
+                "la cobertura depende de las versiones/CPE detectadas y del perfil de escaneo.",
+                s["body"],
+            ))
+            return story
+
+        confirmed = sum(item.status == "confirmed" for item in findings)
+        candidates = sum(item.status == "candidate" for item in findings)
+        exposures = sum(item.status == "exposure" for item in findings)
+        kev_count = sum(item.kev for item in findings)
+        story.append(Paragraph(
+            f"<b>{confirmed}</b> confirmado(s) por NSE, <b>{candidates}</b> candidato(s) "
+            f"por correlación y <b>{exposures}</b> exposición(es) observada(s). "
+            f"<b>{kev_count}</b> CVE(s) aparecen en CISA KEV.",
+            s["body"],
+        ))
+        story.append(Paragraph(
+            "Una coincidencia de producto/CPE es una pista para validar; no confirma por sí sola "
+            "que la instancia sea vulnerable. Los resultados NSE se muestran con la evidencia "
+            "reportada por el script.",
+            s["warning"],
+        ))
+        story.append(Spacer(1, 0.25 * cm))
+
+        status_labels = {
+            "confirmed": "Confirmado por NSE",
+            "candidate": "Candidato — validar",
+            "exposure": "Exposición observada",
+        }
+        for finding in findings:
+            title = escape(finding.title)
+            story.append(Paragraph(title, s["subsection"]))
+            location = (
+                f"{finding.host_ip or 'Host'}"
+                + (f" ({finding.hostname})" if finding.hostname else "")
+                + (f" · {finding.port}/{finding.protocol}" if finding.port else "")
+            )
+            details = [
+                f"<b>Estado:</b> {escape(status_labels.get(finding.status, finding.status))}",
+                f"<b>Severidad:</b> {escape(finding.severity)}"
+                + (f" · CVSS {finding.cvss_score:.1f}" if finding.cvss_score is not None else ""),
+                f"<b>Confianza:</b> {escape(finding.confidence)}",
+                f"<b>Activo:</b> {escape(location)}",
+            ]
+            if finding.cve_id:
+                details.append(f"<b>CVE:</b> {escape(finding.cve_id)}")
+            if finding.cwe_ids:
+                details.append(f"<b>CWE:</b> {escape(', '.join(finding.cwe_ids))}")
+            if finding.kev:
+                details.append("<b>Prioridad:</b> incluida en CISA KEV")
+            if finding.ai_generated:
+                details.append(
+                    "<b>Narrativa IA:</b> "
+                    + escape(finding.ai_provider or "proveedor configurado")
+                )
+                if finding.ai_confidence is not None:
+                    details.append(
+                        f"<b>Confianza narrativa IA:</b> {finding.ai_confidence:.0%} "
+                        "(estimación del modelo)"
+                    )
+            story.append(Paragraph("<br/>".join(details), s["body"]))
+            if finding.ai_summary:
+                story.append(
+                    Paragraph(
+                        f"<b>Resumen del hallazgo (IA):</b> {escape(finding.ai_summary)}",
+                        s["body"],
+                    )
+                )
+            story.append(Paragraph(f"<b>Evidencia:</b> {escape(finding.evidence)}", s["code"]))
+            story.append(Paragraph(f"<b>Impacto:</b> {escape(finding.impact)}", s["body"]))
+            story.append(Paragraph(f"<b>Remediación:</b> {escape(finding.remediation)}", s["body"]))
+            if finding.references:
+                story.append(Paragraph("<b>Referencias:</b>", s["body"]))
+                for reference in finding.references:
+                    story.append(Paragraph(
+                        f"- {escape(reference.title)} — {escape(reference.url)}",
+                        s["reference"],
+                    ))
+            story.append(Spacer(1, 0.25 * cm))
         return story
 
     def _build_host_section(self, host: HostResult) -> list:
@@ -244,6 +353,11 @@ class PDFReportGenerator:
         msf_ports = [p for p in host.ports if p.metasploit_modules]
         if msf_ports:
             story.append(Paragraph("Módulos Metasploit sugeridos", s["subsection"]))
+            story.append(Paragraph(
+                "Las sugerencias se basan en el nombre del servicio y el puerto. "
+                "No verifican producto, versión ni vulnerabilidad.",
+                s["body"],
+            ))
             msf_header = ["Puerto", "Módulo", "Tipo", "Descripción"]
             msf_rows = [msf_header]
             for p in msf_ports:
@@ -448,6 +562,11 @@ class PDFReportGenerator:
                 fontSize=7.5, textColor=LIGHT_GRAY, fontName="Courier",
                 spaceAfter=3, leading=12, backColor=MID_GRAY,
                 leftIndent=8, rightIndent=8,
+            ),
+            "reference": ps(
+                "reference",
+                fontSize=7, textColor=LIGHT_GRAY, fontName="Helvetica",
+                spaceAfter=2, leading=9, leftIndent=8, wordWrap="CJK",
             ),
             "warning": ps(
                 "warning",

@@ -27,6 +27,7 @@ class PortInfo:
     extra_info: str
     scripts: dict[str, str] = field(default_factory=dict)
     metasploit_modules: list[dict] = field(default_factory=list) # Cambiado a dict para coincidir con el mapper
+    cpes: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -201,6 +202,14 @@ class NmapScanner:
                     for script_elem in port_elem.findall("script"):
                         scripts[script_elem.get("id", "")] = script_elem.get("output", "")
 
+                    cpes = []
+                    if service_elem is not None:
+                        cpes = [
+                            cpe_elem.text.strip()
+                            for cpe_elem in service_elem.findall("cpe")
+                            if cpe_elem.text and cpe_elem.text.strip()
+                        ]
+
                     port_info = PortInfo(
                         port=port_id,
                         protocol=protocol,
@@ -210,6 +219,7 @@ class NmapScanner:
                         version=version,
                         extra_info=extra,
                         scripts=scripts,
+                        cpes=cpes,
                     )
                     host_result.ports.append(port_info)
 

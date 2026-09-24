@@ -237,7 +237,9 @@ class MetasploitMapper:
         Busca módulos Metasploit para un PortInfo dado, usando:
         1. Clave exacta (servicio, puerto)
         2. Clave por nombre de servicio
-        3. Clave por puerto genérico
+
+        Las coincidencias por número de puerto solamente se omiten: un puerto
+        no identifica de forma fiable el producto o su versión.
         """
         # 1. Coincidencia exacta servicio + puerto
         key = (port_info.service.lower(), port_info.port)
@@ -248,10 +250,5 @@ class MetasploitMapper:
         svc = port_info.service.lower()
         if svc in SERVICE_NAME_MAP:
             return SERVICE_NAME_MAP[svc]
-
-        # 3. Buscar por puerto únicamente
-        for (db_svc, db_port), modules in MSF_DATABASE.items():
-            if db_port == port_info.port:
-                return modules
 
         return []
