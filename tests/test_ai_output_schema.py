@@ -102,16 +102,16 @@ class AiOutputSchemaTests(unittest.TestCase):
 
         self.assertEqual(narratives[make_finding().finding_id]["confidence"], 0.85)
 
-    def test_model_receives_reference_ids_and_titles_but_not_urls(self):
+    def test_model_receives_only_reference_ids_not_titles_or_urls(self):
         finding = make_finding()
         analyst = StaticAnalyst(valid_payload())
 
         analyst.generate([finding])
 
-        self.assertIn('"id": "F001-R001"', analyst.sent_prompt)
-        self.assertIn('"title": "NVD record"', analyst.sent_prompt)
+        self.assertIn('"reference_ids": ["F001-R001"]', analyst.sent_prompt)
+        self.assertNotIn("NVD record", analyst.sent_prompt)
         self.assertNotIn(finding.references[0].url, analyst.sent_prompt)
-        self.assertIn("NUNCA copies URLs, títulos ni nombres de archivo", analyst.sent_prompt)
+        self.assertIn("NUNCA devuelvas títulos, URLs ni nombres de archivo", analyst.sent_prompt)
 
     def test_logs_truncated_raw_model_payload_when_response_is_rejected(self):
         response = "not-json-debug-marker" + ("x" * 4000)

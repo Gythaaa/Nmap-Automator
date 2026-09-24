@@ -584,8 +584,8 @@ class SecurityNarrativeAnalyst:
             "de hallazgos: devuelve exactamente uno por cada elemento recibido y no inventes IDs. "
             "`confidence` debe ser un número entre 0 y 1 que exprese la confianza en la narrativa, "
             "no en la existencia de la vulnerabilidad. En `references`, usa EXCLUSIVAMENTE los "
-            "IDs incluidos en el campo `references[].id` de cada hallazgo (formato `F001-R001`). "
-            "NUNCA copies URLs, títulos ni nombres de archivo en ese campo. Ejemplo CORRECTO: "
+            "IDs incluidos en el campo `reference_ids` del hallazgo (formato `F001-R001`). "
+            "NUNCA devuelvas títulos, URLs ni nombres de archivo. Ejemplo CORRECTO: "
             "`\"references\": [\"F001-R001\", \"F001-R002\"]`. Si no hay referencias aplicables, "
             "devuelve `\"references\": []`. Devuelve exactamente un objeto JSON con esta estructura: "
             + json.dumps(schema, ensure_ascii=False)
@@ -646,13 +646,7 @@ class SecurityNarrativeAnalyst:
                 self._clip(finding.impact, 1000),
                 self._clip(finding.remediation, 1000),
             ],
-            "references": [
-                {
-                    "id": reference_ids[index],
-                    "title": reference.title,
-                }
-                for index, reference in enumerate(finding.references[:5])
-            ],
+            "reference_ids": reference_ids,
         }
         if self.share_target_identifiers:
             payload["target_ip"] = finding.host_ip
