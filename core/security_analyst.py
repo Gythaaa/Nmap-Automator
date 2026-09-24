@@ -1,6 +1,7 @@
 """Evidence-first security analysis for Nmap scan results."""
 
 import json
+import logging
 import os
 import re
 from typing import Any, Optional
@@ -582,14 +583,17 @@ class SecurityNarrativeAnalyst:
             "sin añadir hechos ausentes. Los IDs F001, F002, etc. son identificadores locales "
             "de hallazgos: devuelve exactamente uno por cada elemento recibido y no inventes IDs. "
             "`confidence` debe ser un número entre 0 y 1 que exprese la confianza en la narrativa, "
-            "no en la existencia de la vulnerabilidad. En `references`, cita únicamente IDs de "
-            "referencia incluidos en el hallazgo; si no hay una referencia aplicable, usa una lista "
-            "vacía. No escribas URLs en el texto. Devuelve exactamente un objeto JSON con esta estructura: "
+            "no en la existencia de la vulnerabilidad. En `references`, usa EXCLUSIVAMENTE los "
+            "IDs incluidos en el campo `references[].id` de cada hallazgo (formato `F001-R001`). "
+            "NUNCA copies URLs, títulos ni nombres de archivo en ese campo. Ejemplo CORRECTO: "
+            "`\"references\": [\"F001-R001\", \"F001-R002\"]`. Si no hay referencias aplicables, "
+            "devuelve `\"references\": []`. Devuelve exactamente un objeto JSON con esta estructura: "
             + json.dumps(schema, ensure_ascii=False)
             + "\nDatos de los hallazgos:\n"
             + json.dumps(analyst_findings, ensure_ascii=False)
         )
 
+        content = ""
         try:
             content = self._complete(system_prompt, user_prompt, schema)
             parsed = self._parse_json(content)
@@ -600,6 +604,10 @@ class SecurityNarrativeAnalyst:
                 allowed_cves=allowed_cves,
             )
         except RuntimeError:
+            logging.getLogger("nmap_automator.ai").debug(
+                "Payload crudo del modelo (máximo 3000 caracteres): %s",
+                content[:3000] if content else "<sin respuesta del modelo>",
+            )
             raise
         except (HTTPError, URLError, TimeoutError, OSError, ValueError, TypeError) as exc:
             raise RuntimeError(f"No se pudo generar la narrativa con {self.provider}: {exc}") from exc
@@ -642,7 +650,6 @@ class SecurityNarrativeAnalyst:
                 {
                     "id": reference_ids[index],
                     "title": reference.title,
-                    "url": reference.url,
                 }
                 for index, reference in enumerate(finding.references[:5])
             ],

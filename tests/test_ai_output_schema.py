@@ -63,6 +63,17 @@ class StaticAnalyst(SecurityNarrativeAnalyst):
         return json.dumps(self.payload)
 
 
+class RawResponseAnalyst(SecurityNarrativeAnalyst):
+    provider = "Analista de prueba"
+
+    def __init__(self, response):
+        super().__init__("modelo-de-prueba")
+        self.response = response
+
+    def _complete(self, system_prompt, user_prompt, schema):
+        return self.response
+
+
 class AiOutputSchemaTests(unittest.TestCase):
     def test_valid_output_is_typed_and_maps_to_original_finding(self):
         finding = make_finding()
@@ -90,6 +101,30 @@ class AiOutputSchemaTests(unittest.TestCase):
         _, narratives = StaticAnalyst(payload).generate([make_finding()])
 
         self.assertEqual(narratives[make_finding().finding_id]["confidence"], 0.85)
+
+    def test_model_receives_reference_ids_and_titles_but_not_urls(self):
+        finding = make_finding()
+        analyst = StaticAnalyst(valid_payload())
+
+        analyst.generate([finding])
+
+        self.assertIn('"id": "F001-R001"', analyst.sent_prompt)
+        self.assertIn('"title": "NVD record"', analyst.sent_prompt)
+        self.assertNotIn(finding.references[0].url, analyst.sent_prompt)
+        self.assertIn("NUNCA copies URLs, títulos ni nombres de archivo", analyst.sent_prompt)
+
+    def test_logs_truncated_raw_model_payload_when_response_is_rejected(self):
+        response = "not-json-debug-marker" + ("x" * 4000)
+
+        with self.assertLogs("nmap_automator.ai", level="DEBUG") as captured:
+            with self.assertRaises(RuntimeError):
+                RawResponseAnalyst(response).generate([make_finding()])
+
+        logged_message = captured.records[0].getMessage()
+        logged_payload = logged_message.partition("): ")[2]
+        self.assertIn("Payload crudo del modelo", logged_message)
+        self.assertTrue(logged_payload.startswith("not-json-debug-marker"))
+        self.assertEqual(len(logged_payload), 3000)
 
     def test_target_identifiers_are_redacted_by_default(self):
         finding = make_finding()

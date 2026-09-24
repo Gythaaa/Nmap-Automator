@@ -55,6 +55,13 @@ class ReportTests(unittest.TestCase):
                 console=Console(file=io.StringIO()),
             )
 
+            rendered_reference_text = "\n".join(
+                element.getPlainText()
+                for element in generator._build_findings_section([finding])
+                if hasattr(element, "getPlainText")
+            )
+            self.assertIn(finding.references[0].url, rendered_reference_text)
+
             generator.generate(
                 [host],
                 mode="medium",
