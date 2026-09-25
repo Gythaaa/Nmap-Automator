@@ -2,6 +2,7 @@
   <h1>🛡️ NmapAutomator</h1>
   <p><strong>Nmap → NVD/CISA KEV → Security Analyst IA → PDF</strong></p>
   <p>Escaneo autorizado, hallazgos con evidencia y reportes listos para revisar.</p>
+  <img src="demo.gif" alt="Demo" width="800">
 </div>
 
 ![Python](https://img.shields.io/badge/Python-3.10%2B-blue?logo=python)
